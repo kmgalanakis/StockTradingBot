@@ -146,19 +146,34 @@ Portainer can clone this repo, build the image, and run the bot on a server. Use
 The Portainer file differs from the regular one in these ways:
 
 - It reads the keys from `stack.env`. Portainer creates this file from the environment variables you enter in the stack editor.
-- It stores `logs/` in a Docker volume named `tradingbot-logs`. The volume keeps the logs and `strategy_state.json` when you redeploy.
+- It writes `logs/` to the folder `/opt/stocktradingbot/logs` on the server. The folder keeps the logs and `strategy_state.json` when you redeploy.
 - It does not mount `config.yaml`. The image contains the `config.yaml` from git, so you change settings by pushing a commit and redeploying.
+
+### Create the logs folder
+
+Before the first deploy, create the logs folder on the server that runs Portainer:
+
+```bash
+sudo mkdir -p /opt/stocktradingbot/logs
+```
+
+To move the bot from another machine, stop the bot there first with `docker compose down`. Then copy its `logs/` folder into the new folder, so the bot keeps its state and run history:
+
+```bash
+scp -r logs user@server:/tmp/stocktradingbot-logs
+ssh user@server 'sudo cp -a /tmp/stocktradingbot-logs/. /opt/stocktradingbot/logs/ && rm -r /tmp/stocktradingbot-logs'
+```
 
 ### Create the stack
 
-1. In Portainer, open **Stacks**, then **Add stack**, then choose **Repository**.
+1. In Portainer, open **Stacks**, then **Add stack**. Set **Name** to `stocktradingbot`, then choose **Repository**.
 2. Set **Repository URL** to `https://github.com/kmgalanakis/StockTradingBot`. For a private repo, turn on **Authentication** and enter a GitHub personal access token that can read the repo.
 3. Set **Repository reference** to `refs/heads/main` and **Compose path** to `docker-compose.portainer.yml`.
 4. Under **Environment variables**, add `APCA_API_KEY_ID`, `APCA_API_SECRET_KEY`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, and optionally `LOCAL_TIMEZONE`. You can also upload your local `.env` with **Load variables from .env file**.
 5. Optional: turn on **GitOps updates**. Portainer then redeploys the stack when you push to `main`.
 6. Click **Deploy the stack**.
 
-Telegram sends the "Trading bot started" message when the container is up. Container output is in Portainer under **Containers**, then `tradingbot`, then **Logs**.
+Telegram sends the "Trading bot started" message when the container is up. Container output is in Portainer under **Containers**, then `stocktradingbot`, then **Logs**.
 
 Run only one copy of the bot. Stop any other copy, for example one on your laptop, before you deploy the stack. Two copies with the same Telegram token conflict, and both would place the 9:30 trades.
 
@@ -168,7 +183,13 @@ Push your changes to `main`. In Portainer, open the stack and click **Pull and r
 
 ### Logs in Portainer
 
-The log files from the [Logs](#logs) section are in the `tradingbot-logs` volume, not in a host folder. To read them, open the container's **Console** in Portainer and look in `/app/logs`. On the server itself, the files are under `/var/lib/docker/volumes/`, in a folder whose name ends with `tradingbot-logs`.
+The log files from the [Logs](#logs) section are in `/opt/stocktradingbot/logs` on the server. To follow the bot log live:
+
+```bash
+tail -f /opt/stocktradingbot/logs/bot.log
+```
+
+The container runs as root, so the files belong to root. Use `sudo` to edit or delete them.
 
 ## Telegram commands
 
