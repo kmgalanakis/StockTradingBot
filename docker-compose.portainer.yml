@@ -2,6 +2,8 @@ services:
   stocktradingbot:
     build: .
     image: stocktradingbot:latest
+    # Build the image from the repo on every deploy. The image is not on Docker Hub, so never pull it.
+    pull_policy: build
     container_name: stocktradingbot
     restart: unless-stopped
     # Portainer writes the stack's environment variables to this file.

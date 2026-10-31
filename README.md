@@ -179,7 +179,7 @@ Run only one copy of the bot. Stop any other copy, for example one on your lapto
 
 ### Updating in Portainer
 
-Push your changes to `main`. In Portainer, open the stack and click **Pull and redeploy**. Turn on **Re-pull image and redeploy** so Portainer builds the image again with the new code and `config.yaml`. With GitOps updates on, Portainer does this for you.
+Push your changes to `main`. In Portainer, open the stack and click **Pull and redeploy**. Portainer builds the image again with the new code and `config.yaml` at every deploy, because the compose file sets `pull_policy: build`. The image is not on Docker Hub, so the **Re-pull image** option has no effect. With GitOps updates on, Portainer redeploys for you.
 
 ### Logs in Portainer
 
