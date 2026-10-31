@@ -10,5 +10,6 @@ services:
     volumes:
       # Logs and strategy_state.json are written to this folder on the server,
       # so they survive redeploys. Create the folder before the first deploy.
+      # Set LOGS_DIR in the stack's environment variables to use another folder.
       # config.yaml is copied into the image, so config changes go through git.
-      - /opt/stocktradingbot/logs:/app/logs
+      - ${LOGS_DIR:-/opt/stocktradingbot/logs}:/app/logs

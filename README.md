@@ -146,7 +146,7 @@ Portainer can clone this repo, build the image, and run the bot on a server. Use
 The Portainer file differs from the regular one in these ways:
 
 - It reads the keys from `stack.env`. Portainer creates this file from the environment variables you enter in the stack editor.
-- It writes `logs/` to the folder `/opt/stocktradingbot/logs` on the server. The folder keeps the logs and `strategy_state.json` when you redeploy.
+- It writes `logs/` to the folder `/opt/stocktradingbot/logs` on the server. The folder keeps the logs and `strategy_state.json` when you redeploy. To use another folder, set `LOGS_DIR` in the stack's environment variables, for example `LOGS_DIR=/mnt/data/stocktradingbot/logs`. The commands below use the default folder, so replace the path if you set `LOGS_DIR`.
 - It does not mount `config.yaml`. The image contains the `config.yaml` from git, so you change settings by pushing a commit and redeploying.
 
 ### Create the logs folder
@@ -169,7 +169,7 @@ ssh user@server 'sudo cp -a /tmp/stocktradingbot-logs/. /opt/stocktradingbot/log
 1. In Portainer, open **Stacks**, then **Add stack**. Set **Name** to `stocktradingbot`, then choose **Repository**.
 2. Set **Repository URL** to `https://github.com/kmgalanakis/StockTradingBot`. For a private repo, turn on **Authentication** and enter a GitHub personal access token that can read the repo.
 3. Set **Repository reference** to `refs/heads/main` and **Compose path** to `docker-compose.portainer.yml`.
-4. Under **Environment variables**, add `APCA_API_KEY_ID`, `APCA_API_SECRET_KEY`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, and optionally `LOCAL_TIMEZONE`. You can also upload your local `.env` with **Load variables from .env file**.
+4. Under **Environment variables**, add `APCA_API_KEY_ID`, `APCA_API_SECRET_KEY`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, and optionally `LOCAL_TIMEZONE` and `LOGS_DIR`. You can also upload your local `.env` with **Load variables from .env file**.
 5. Optional: turn on **GitOps updates**. Portainer then redeploys the stack when you push to `main`.
 6. Click **Deploy the stack**.
 
@@ -183,7 +183,7 @@ Push your changes to `main`. In Portainer, open the stack and click **Pull and r
 
 ### Logs in Portainer
 
-The log files from the [Logs](#logs) section are in `/opt/stocktradingbot/logs` on the server. To follow the bot log live:
+The log files from the [Logs](#logs) section are in `/opt/stocktradingbot/logs` on the server, or in the `LOGS_DIR` folder if you set one. To follow the bot log live:
 
 ```bash
 tail -f /opt/stocktradingbot/logs/bot.log
