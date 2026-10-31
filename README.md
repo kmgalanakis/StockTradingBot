@@ -146,8 +146,23 @@ Portainer can clone this repo, build the image, and run the bot on a server. Use
 The Portainer file differs from the regular one in these ways:
 
 - It reads the keys from `stack.env`. Portainer creates this file from the environment variables you enter in the stack editor.
-- It stores `logs/` in a Docker volume named `tradingbot-logs`. The volume keeps the logs and `strategy_state.json` when you redeploy.
+- It writes `logs/` to the folder `/opt/tradingbot/logs` on the server. The folder keeps the logs and `strategy_state.json` when you redeploy.
 - It does not mount `config.yaml`. The image contains the `config.yaml` from git, so you change settings by pushing a commit and redeploying.
+
+### Create the logs folder
+
+Before the first deploy, create the logs folder on the server that runs Portainer:
+
+```bash
+sudo mkdir -p /opt/tradingbot/logs
+```
+
+To move the bot from another machine, stop the bot there first with `docker compose down`. Then copy its `logs/` folder into the new folder, so the bot keeps its state and run history:
+
+```bash
+scp -r logs user@server:/tmp/tradingbot-logs
+ssh user@server 'sudo cp -a /tmp/tradingbot-logs/. /opt/tradingbot/logs/ && rm -r /tmp/tradingbot-logs'
+```
 
 ### Create the stack
 
@@ -168,7 +183,13 @@ Push your changes to `main`. In Portainer, open the stack and click **Pull and r
 
 ### Logs in Portainer
 
-The log files from the [Logs](#logs) section are in the `tradingbot-logs` volume, not in a host folder. To read them, open the container's **Console** in Portainer and look in `/app/logs`. On the server itself, the files are under `/var/lib/docker/volumes/`, in a folder whose name ends with `tradingbot-logs`.
+The log files from the [Logs](#logs) section are in `/opt/tradingbot/logs` on the server. To follow the bot log live:
+
+```bash
+tail -f /opt/tradingbot/logs/bot.log
+```
+
+The container runs as root, so the files belong to root. Use `sudo` to edit or delete them.
 
 ## Telegram commands
 
