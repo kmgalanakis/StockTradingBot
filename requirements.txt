@@ -1,6 +1,8 @@
 alpaca-py
 yfinance
 pandas
+# NumPy 2.4 and newer need an x86-64-v2 CPU. Older CPUs and some virtual CPUs fail to load it.
+numpy<2.4
 python-dotenv
 pyyaml
 python-telegram-bot[job-queue]>=22,<23
