@@ -2,6 +2,7 @@
 
 import logging
 import os
+import time
 
 from alpaca.trading.client import TradingClient
 from alpaca.trading.enums import OrderSide, QueryOrderStatus, TimeInForce
@@ -36,13 +37,57 @@ def open_order_symbols(client):
 
 
 def place_order(client, symbol, side, qty):
-    """Place a market order. Return a short description of what happened."""
+    """Place a market order. Return (short description of what happened, order id)."""
     order = client.submit_order(
         MarketOrderRequest(symbol=symbol, qty=qty, side=OrderSide(side), time_in_force=TimeInForce.DAY)
     )
     message = f"Submitted {side} order for {qty:g} {symbol}. Order id {order.id}, status {order.status.value}."
     log.info(message)
-    return message
+    return message, order.id
+
+
+def place_dollar_order(client, symbol, side, dollars):
+    """Place a market order for a dollar amount, which can buy or sell a fraction of a share.
+
+    Return (short description of what happened, order id).
+    """
+    order = client.submit_order(
+        MarketOrderRequest(symbol=symbol, notional=round(dollars, 2), side=OrderSide(side), time_in_force=TimeInForce.DAY)
+    )
+    message = f"Submitted {side} order for ${dollars:,.2f} of {symbol}. Order id {order.id}, status {order.status.value}."
+    log.info(message)
+    return message, order.id
+
+
+def market_is_open(client):
+    return client.get_clock().is_open
+
+
+def position_value(client, symbol):
+    """Return (shares, market value) of the position in `symbol`, or (0, 0) when there is none."""
+    for p in client.get_all_positions():
+        if p.symbol == symbol:
+            return float(p.qty), float(p.market_value)
+    return 0.0, 0.0
+
+
+def account_cash(client):
+    """Return (cash, equity) of the account."""
+    account = client.get_account()
+    return float(account.cash), float(account.equity)
+
+
+def wait_for_orders(client, order_ids, timeout=60):
+    """Wait until every order is filled, canceled, or rejected. Return True if none is still open."""
+    done = {"filled", "canceled", "expired", "rejected", "done_for_day"}
+    deadline = time.monotonic() + timeout
+    waiting = set(order_ids)
+    while waiting:
+        waiting = {i for i in waiting if client.get_order_by_id(i).status.value not in done}
+        if not waiting or time.monotonic() > deadline:
+            break
+        time.sleep(2)
+    return not waiting
 
 
 def last_buy_fill_time(client, symbol):

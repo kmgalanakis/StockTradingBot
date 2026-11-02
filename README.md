@@ -76,8 +76,24 @@ All options default to the original strategy. Change one at a time, and test it 
 | `market_filter_average` | `0` (default, off), or a number of days such as `200` | Blocks new buys while `market_filter_symbol` closes at or below its average over this many days |
 | `market_filter_symbol` | `SPY` (default) | The fund that measures the market's trend |
 | `market_filter_exit` | `false` (default), `true` | With the market filter on, also sells every position while the market fund is below its average |
+| `idle_cash_symbol` | empty (default, off), or a fund such as `SPY` | Keeps money that is not in a stock in this fund. See [Idle cash in a fund](#idle-cash-in-a-fund). |
+| `idle_cash_reserve_pct` | `1` (default) | With idle cash on, the share of the account kept as cash |
 
 These options are not in the default `config.yaml`. Add a line, for example `market_filter_average: 200`, to use one. The trailing stop memory is kept in `logs/strategy_state.json`. Longer averages need more history: set `history_days` above `long_window + confirm_days`, for example 250 for a 200-day average.
+
+### Idle cash in a fund
+
+Most of the time only some of the symbols are in an uptrend, so most of the account sits in cash. With `idle_cash_symbol: SPY`, that cash goes into SPY instead:
+
+- Before a buy, the bot sells enough SPY to pay for it and keep the cash reserve, then waits up to 30 seconds for the sale to fill.
+- At the end of each run, it waits for the run's orders to fill, then buys SPY with the cash above `idle_cash_reserve_pct` of the account. If cash went below zero, it sells SPY to cover it.
+- Money from a stock sale goes back into SPY at the end of the same run.
+- The bot only moves money while the market is open. A `/check` outside market hours leaves SPY alone.
+- SPY orders are in dollars, so they can buy or sell part of a share. SPY changes get no Telegram alerts, but SPY shows in `/status` and the daily status.
+
+The fund must not also be in `symbols`. Use `sizing: dollars` with this option, so each buy is a fixed amount and not 10 shares of any price.
+
+In a backtest of the 20/50 crossover on the S&P 500 members of each period from 2010 to 2026, this option raised the yearly return from about 5% to about 12.6%. SPY itself made 13% to 15% a year over the same years. Because the money is nearly always invested, the account also falls about as much as SPY in a crash: the worst fall went from −18% to −33%. With the market filter on, the cash still goes into SPY while SPY is below its average.
 
 ## Requirements
 

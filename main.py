@@ -19,7 +19,7 @@ from telegram.ext import Application, CommandHandler, ContextTypes, filters
 
 import bot
 import trader
-from strategy import BASE_DIR, MARKET_TZ
+from strategy import BASE_DIR, MARKET_TZ, load_config
 from timezones import format_time
 
 RUN_TIME = time(9, 30, tzinfo=MARKET_TZ)
@@ -213,7 +213,11 @@ async def watch_positions(context: ContextTypes.DEFAULT_TYPE):
         def fill_price(symbol, side):
             return trader.last_fill_price(client, symbol, side)
 
-        messages = await asyncio.to_thread(describe_position_changes, old, new, fill_price)
+        # The idle cash fund changes on most runs, so it gets no alerts.
+        fund = load_config()["idle_cash_symbol"]
+        old = {s: p for s, p in old.items() if s != fund}
+        new_alerts = {s: p for s, p in new.items() if s != fund}
+        messages = await asyncio.to_thread(describe_position_changes, old, new_alerts, fill_price)
     except Exception as e:
         # Keep the last snapshot, so the change is reported on the next successful check.
         log.warning(f"Position check failed: {e}")
