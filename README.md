@@ -95,6 +95,8 @@ The fund must not also be in `symbols`. Use `sizing: dollars` with this option, 
 
 In a backtest of the 20/50 crossover on the S&P 500 members of each period from 2010 to 2026, this option raised the yearly return from about 5% to about 12.6%. SPY itself made 13% to 15% a year over the same years. Because the money is nearly always invested, the account also falls about as much as SPY in a crash: the worst fall went from −18% to −33%. With the market filter on, the cash still goes into SPY while SPY is below its average.
 
+Any fund that Alpaca can trade in dollar amounts works. For a smaller fall in a crash, use a stocks and bonds fund such as `AOR` (about 60% stocks, 40% bonds) instead of SPY. In a backtest of the bot on the default 20 symbols, it gave about 3% a year less than SPY, and the worst fall was about 6 points smaller.
+
 ## Requirements
 
 - An Alpaca account with paper trading API keys. Find the keys at [app.alpaca.markets](https://app.alpaca.markets) under Paper Trading > API Keys.
