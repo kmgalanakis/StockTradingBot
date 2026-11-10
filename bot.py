@@ -103,6 +103,56 @@ def _buy_quantity(config, price):
     return float(config["trade_size"])
 
 
+def _free_cash_for_buy(client, config, cost):
+    """Sell enough of the idle cash fund to pay for a buy of `cost` dollars and keep the cash reserve."""
+    fund = config["idle_cash_symbol"]
+    cash, equity = trader.account_cash(client)
+    reserve = equity * config["idle_cash_reserve_pct"] / 100
+    # 1% extra covers a small price move between the sale and the buy.
+    need = cost * 1.01 + reserve - cash
+    shares, value = trader.position_value(client, fund)
+    if need < 1 or shares <= 0:
+        return None
+    if need >= value * 0.99:
+        message, order_id = trader.place_order(client, fund, "sell", shares)
+    else:
+        message, order_id = trader.place_dollar_order(client, fund, "sell", need)
+    if not trader.wait_for_orders(client, [order_id], timeout=30):
+        log.warning(f"The {fund} sale has not filled after 30 seconds. Placing the buy anyway.")
+    return message
+
+
+def _invest_idle_cash(client, config, order_ids, dry_run):
+    """Put cash above the reserve into the idle cash fund, or sell the fund if cash went below zero.
+
+    Return a list of order descriptions.
+    """
+    fund = config["idle_cash_symbol"]
+    if order_ids and not trader.wait_for_orders(client, order_ids):
+        log.warning(f"Some orders from this run are still open. Idle cash goes into {fund} at the next run.")
+        return []
+    cash, equity = trader.account_cash(client)
+    reserve = equity * config["idle_cash_reserve_pct"] / 100
+    extra = cash - reserve
+    if extra >= 1:
+        side, dollars = "buy", extra
+    elif cash < -1:
+        _, value = trader.position_value(client, fund)
+        side, dollars = "sell", min(-cash, value)
+        if dollars < 1:
+            return []
+    else:
+        log.info(f"Idle cash: ${cash:,.2f} in cash, nothing to move.")
+        return []
+    if dry_run:
+        log.info(f"Dry run. Would {side} ${dollars:,.2f} of {fund}. Cash ${cash:,.2f}, reserve ${reserve:,.2f}.")
+        return []
+    log.info(f"Idle cash: ${cash:,.2f} in cash, reserve ${reserve:,.2f}. Moving ${dollars:,.2f} into {fund}."
+             if side == "buy" else f"Idle cash: cash is ${cash:,.2f}. Selling ${dollars:,.2f} of {fund}.")
+    message, _ = trader.place_dollar_order(client, fund, side, dollars)
+    return [message]
+
+
 def _load_state():
     """Return (stopped, checked). Kept between runs in logs/strategy_state.json.
 
@@ -157,10 +207,19 @@ def _run(dry_run):
             + (f"market filter {config['market_filter_symbol']} {config['market_filter_average']}-day"
                f"{' with exit' if config['market_filter_exit'] else ''}"
                if strategy.market_filter_on(config) else "market filter off")
+            + (f", idle cash in {config['idle_cash_symbol']}" if strategy.idle_cash_on(config) else "")
         )
         client, positions, pending = _connect(dry_run)
         stopped, checked = _load_state()
         market_closes = _market_closes(config)
+        order_ids = []
+        idle_cash = strategy.idle_cash_on(config) and client is not None
+        if idle_cash and not trader.market_is_open(client):
+            log.info(f"Market is closed. Idle cash in {config['idle_cash_symbol']} is left alone until a run while it is open.")
+            idle_cash = False
+        if idle_cash and config["idle_cash_symbol"] in pending:
+            log.info(f"An order for {config['idle_cash_symbol']} is still open. Idle cash is left alone this run.")
+            idle_cash = False
 
         for symbol in config["symbols"]:
             log.info(f"----- {symbol} -----")
@@ -213,7 +272,13 @@ def _run(dry_run):
                 continue
 
             try:
-                summary["orders"].append(trader.place_order(client, symbol, action, qty))
+                if idle_cash and action == "buy":
+                    sale = _free_cash_for_buy(client, config, qty * today.close)
+                    if sale:
+                        summary["orders"].append(sale)
+                message, order_id = trader.place_order(client, symbol, action, qty)
+                summary["orders"].append(message)
+                order_ids.append(order_id)
                 checked[symbol] = decided_on
                 if action == "sell" and reason.startswith("trailing stop"):
                     stopped.add(symbol)
@@ -226,6 +291,12 @@ def _run(dry_run):
 
         if not dry_run:
             _save_state(stopped, checked)
+        if idle_cash:
+            try:
+                summary["orders"] += _invest_idle_cash(client, config, order_ids, dry_run)
+            except Exception as e:
+                log.error(f"Moving idle cash into {config['idle_cash_symbol']} failed: {e}")
+                summary["errors"].append(f"Idle cash failed: {e}")
     except Exception as e:
         log.exception(f"Run failed: {e}")
         summary["errors"].append(f"Run failed: {e}")

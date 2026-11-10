@@ -25,6 +25,8 @@ DEFAULTS = {
     "market_filter_average": 0,
     "market_filter_symbol": "SPY",
     "market_filter_exit": False,
+    "idle_cash_symbol": "",
+    "idle_cash_reserve_pct": 1.0,
 }
 
 
@@ -43,11 +45,19 @@ def validate(config):
         raise ValueError("Config error: sizing must be 'shares' or 'dollars'.")
     if config["market_filter_average"] == 1 or config["market_filter_average"] < 0:
         raise ValueError("Config error: market_filter_average must be 0 (off) or 2 or more.")
+    if config["idle_cash_symbol"] and config["idle_cash_symbol"] in config.get("symbols", []):
+        raise ValueError("Config error: idle_cash_symbol cannot also be in symbols.")
+    if not 0 <= config["idle_cash_reserve_pct"] < 100:
+        raise ValueError("Config error: idle_cash_reserve_pct must be from 0 to below 100.")
     return config
 
 
 def market_filter_on(config):
     return config["market_filter_average"] > 0
+
+
+def idle_cash_on(config):
+    return bool(config["idle_cash_symbol"])
 
 
 def market_trend(market_closes, config, index):
