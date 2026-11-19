@@ -15,6 +15,7 @@ from datetime import datetime, time
 from dotenv import load_dotenv
 from telegram import BotCommand, BotCommandScopeChat, Update
 from telegram.constants import ParseMode
+from telegram.error import BadRequest, NetworkError
 from telegram.ext import Application, CommandHandler, ContextTypes, filters
 
 import bot
@@ -27,6 +28,7 @@ STATUS_TIME = time(16, 5, tzinfo=MARKET_TZ)  # Daily status, 5 minutes after the
 WEEKDAYS = (1, 2, 3, 4, 5)  # Telegram's job queue counts 0 as Sunday.
 JOB_NAME = "daily_run"
 POSITION_CHECK_SECONDS = 60
+SEND_RETRY_DELAYS = (5, 15, 45)  # Seconds to wait before each new try when Telegram cannot be reached.
 
 log = logging.getLogger("bot")
 
@@ -182,6 +184,25 @@ def next_run_text(job_queue):
 
 # ---------- Scheduled job ----------
 
+async def send_message(context: ContextTypes.DEFAULT_TYPE, chat_id, text, **kwargs):
+    """Send a message and try again a few times if Telegram cannot be reached.
+
+    Returns False when every try failed. A bad request, such as broken HTML, is raised at once.
+    """
+    for delay in (*SEND_RETRY_DELAYS, None):
+        try:
+            await context.bot.send_message(chat_id, text, **kwargs)
+            return True
+        except BadRequest:
+            raise
+        except NetworkError as e:
+            if delay is None:
+                log.error(f"Could not send Telegram message: {e}")
+                return False
+            log.warning(f"Could not send Telegram message: {e}. Trying again in {delay} seconds.")
+            await asyncio.sleep(delay)
+
+
 async def daily_run(context: ContextTypes.DEFAULT_TYPE):
     chat_id = context.job.chat_id
     try:
@@ -189,14 +210,17 @@ async def daily_run(context: ContextTypes.DEFAULT_TYPE):
         today = datetime.now(MARKET_TZ).date()
         if not await asyncio.to_thread(trader.is_trading_day, client, today):
             log.info(f"Market closed on {today}. Skipping run.")
-            await context.bot.send_message(chat_id, f"Market closed today ({today}). No run.")
+            await send_message(context, chat_id, f"Market closed today ({today}). No run.")
             return
 
         summary = await asyncio.to_thread(bot.run_once, False)
-        await context.bot.send_message(chat_id, format_summary(summary), parse_mode=ParseMode.HTML)
     except Exception as e:
         log.exception(f"Scheduled run failed: {e}")
-        await context.bot.send_message(chat_id, f"Scheduled run failed: {e}")
+        await send_message(context, chat_id, f"Scheduled run failed: {e}")
+        return
+
+    # The run is done here. A Telegram problem must not be reported as a failed run.
+    await send_message(context, chat_id, format_summary(summary), parse_mode=ParseMode.HTML)
 
 
 async def watch_positions(context: ContextTypes.DEFAULT_TYPE):
@@ -224,7 +248,7 @@ async def watch_positions(context: ContextTypes.DEFAULT_TYPE):
     for message in messages:
         message += f"\nDetected at {detected}"
         log.info(message.replace("<b>", "").replace("</b>", "").replace("\n", " | "))
-        await context.bot.send_message(context.job.chat_id, message, parse_mode=ParseMode.HTML)
+        await send_message(context, context.job.chat_id, message, parse_mode=ParseMode.HTML)
 
 
 async def daily_status(context: ContextTypes.DEFAULT_TYPE):
@@ -252,10 +276,12 @@ async def daily_status(context: ContextTypes.DEFAULT_TYPE):
             format_orders(fills, "Orders filled today"),
         ])
         log.info(f"Daily status: equity {money(account.equity)}, {len(positions)} positions, {len(fills)} fills today")
-        await context.bot.send_message(chat_id, text, parse_mode=ParseMode.HTML)
     except Exception as e:
         log.exception(f"Daily status failed: {e}")
-        await context.bot.send_message(chat_id, f"Daily status failed: {e}")
+        await send_message(context, chat_id, f"Daily status failed: {e}")
+        return
+
+    await send_message(context, chat_id, text, parse_mode=ParseMode.HTML)
 
 
 # ---------- Commands ----------
